@@ -1,0 +1,86 @@
+{
+  "p4_src": "p4src/siphash24_egress_bmv2.p4",
+  "cli": true,
+  "pcap_dump": false,
+  "enable_log": false,
+  "topology": {
+    "assignment_strategy": "l3",
+    "default":{
+      "auto_arp_tables": true
+    },
+    "links": [["h1","s1"],["h3","s3"],["h2","s2"],["h4","s4"],["h5","s5"],["h7","s7"],["h9","s9"],["h11","s11"],["h13","s13"],["h15","s15"],["h16","s15"],["h17","s15"],["s1","s2"],["s3","s2"],["s2","s4"],["s4","s6"],["s4","s5"],["s4","s7"],["s4","s8"],["s4","s9"],["s8","s9"],["s8","s14"],["s8","s13"],["s8","s15"],["s9","s10"],["s9","s11"],["s9","s12"]],
+    "hosts": {
+      "h1": {
+      },
+      "h2": {
+      },
+      "h3":{
+      },
+      "h4":{
+      },
+      "h5":{
+      },
+      "h7":{
+      },
+      "h9":{
+      },
+      "h11":{
+      },
+      "h13":{
+      },
+      "h15":{
+      },
+      "h16":{
+      },
+      "h17":{
+      }
+    },
+    "switches": {
+      "s1": {
+        "cpu_port": true
+      },
+      "s2": {
+        "cpu_port": true
+      },
+      "s3": {
+        "cpu_port": true
+      },
+      "s4": {
+        "cpu_port": true
+      },
+      "s5": {
+        "cpu_port": true
+      },
+      "s6": {
+        "cpu_port": true
+      },
+      "s7": {
+        "cpu_port": true
+      },
+      "s8": {
+        "cpu_port": true
+      },
+      "s9": {
+        "cpu_port": true
+      },
+      "s10": {
+        "cpu_port": true
+      },
+      "s11": {
+        "cpu_port": true
+      },
+      "s12": {
+        "cpu_port": true
+      },
+      "s13": {
+        "cpu_port": true
+      },
+      "s14": {
+        "cpu_port": true
+      },
+      "s15": {
+        "cpu_port": true
+      }
+    }
+  }
+}

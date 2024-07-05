@@ -1,0 +1,62 @@
+{
+  "p4_src": "p4src/siphash24_egress_bmv2.p4",
+  "cli": true,
+  "pcap_dump": true,
+  "enable_log": true,
+  "topology": {
+    "assignment_strategy": "l3",
+    "default":{
+      "auto_arp_tables": true
+    },
+    "links": [["h1", "s1"],["h12", "s1"], ["h7", "s7"],["h8", "s7"], ["h9", "s7"], ["h2","s2"], ["h3","s3"], ["h4","s4"],["h5","s5"],["h11","s6"],["h10","s6"], ["h6","s6"],["s1", "s2"], ["s2", "s3"], ["s3", "s4"], ["s3", "s5"], ["s3", "s6"], ["s4", "s5"], ["s5", "s7"], ["s6", "s7"]],
+    "hosts": {
+      "h1": {
+      },
+      "h2": {
+      },
+      "h3":{
+      },
+      "h4":{
+      },
+      "h5":{
+      },
+      "h6":{
+      },
+      "h7":{
+      },
+      "h8":{
+      },
+      "h9":{
+      },
+      "h10":{
+      },
+      "h11":{
+      },
+      "h12":{
+      }
+    },
+    "switches": {
+      "s1": {
+        "cpu_port": true
+      },
+      "s2": {
+        "cpu_port": true
+      },
+      "s3": {
+        "cpu_port": true
+      },
+      "s4": {
+        "cpu_port": true
+      },
+      "s5": {
+        "cpu_port": true
+      },
+      "s6": {
+        "cpu_port": true
+      },
+      "s7": {
+        "cpu_port": true
+      }
+    }
+  }
+}
