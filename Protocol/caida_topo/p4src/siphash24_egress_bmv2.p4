@@ -1,6 +1,4 @@
 #define SIP_PORT 5555
-#define SIP_KEY_0 ((bit<64>) 0x0706050403020100)
-#define SIP_KEY_1 ((bit<64>) 0x0f0e0d0c0b0a0908)
 const bit<64> const_0 = 0x736f6d6570736575;
 const bit<64> const_1 = 0x646f72616e646f6d;
 const bit<64> const_2 = 0x6c7967656e657261;
@@ -274,7 +272,7 @@ control MyIngress(
 
                 bit<1> tmp;
                 notification_register.read(tmp,0);
-                if (tmp != 1){
+                if (tmp == 0){
                   standard_metadata.mcast_grp = ig_md.in_port;
                 }
 
@@ -302,6 +300,10 @@ control MyEgress(
         inout ig_metadata_t ig_md,
         inout standard_metadata_t standard_metadata) {
 
+        register<bit<64>>(2) sip_key;
+        bit<64> sip_key_0;
+        bit<64> sip_key_1;
+
         action drop() {
 		        mark_to_drop(standard_metadata);
 		    }
@@ -325,10 +327,6 @@ control MyEgress(
 		        ig_md.rnd_bit = (bit<1>) (standard_metadata.ingress_port % 2); // simple pseudo-random
 		    }
 
-		    action incr_and_recirc(bit<8> next_round) {
-		        hdr.sip_meta.curr_round = next_round;
-		        hdr.udp.dst_port = SIP_PORT + 1;
-		    }
 
 		    action do_not_recirc() {
 
@@ -361,11 +359,16 @@ control MyEgress(
             write_msgvar_m_3();
         }
 
-        action sip_init(bit<64> key_0, bit<64> key_1) {
-		        hdr.sip_meta.v_0 = const_0 ^ key_0;
-		        hdr.sip_meta.v_1 = const_1 ^ key_1;
-		        hdr.sip_meta.v_2 = const_2 ^ key_0;
-		        hdr.sip_meta.v_3 = const_3 ^ key_1;
+        action sip_init() {
+
+            sip_key.read(sip_key_0,0);
+            sip_key.read(sip_key_1,1);
+            log_msg("key0 {}",{sip_key_0});
+            log_msg("key1 {}",{sip_key_1});
+		        hdr.sip_meta.v_0 = const_0 ^ sip_key_0;
+		        hdr.sip_meta.v_1 = const_1 ^ sip_key_1;
+		        hdr.sip_meta.v_2 = const_2 ^ sip_key_0;
+		        hdr.sip_meta.v_3 = const_3 ^ sip_key_1;
 
 		    }
 
@@ -504,129 +507,33 @@ control MyEgress(
 		        }
 		        default_action = nop;
 		        const entries = {
-		            SIP_PORT: sip_init(SIP_KEY_0, SIP_KEY_1);
+		            SIP_PORT: sip_init();
 		        }
+
 		    }
 
-		    table tb_recirc_decision {
-		        key = {
-		            hdr.sip_meta.curr_round: exact;
-		        }
-		        actions = {
-		            incr_and_recirc;
-		            do_not_recirc;
-		            nop;
-		        }
-		        default_action = nop;
-		        const entries = {
-		            0: incr_and_recirc(1);
-		            1: incr_and_recirc(2);
-		            2: incr_and_recirc(3);
-		            3: incr_and_recirc(4);
-		            4: incr_and_recirc(5);
-		            5: incr_and_recirc(6);
-		            6: incr_and_recirc(7);
-		            7: incr_and_recirc(8);
-		            8: incr_and_recirc(9);
-		            9: incr_and_recirc(10);
-		            10: incr_and_recirc(11);
-		            11: do_not_recirc();
-		        }
-		    }
 
-        table tb_start_round {
-            key = {
-                hdr.sip_meta.curr_round: exact;
-            }
-            actions = {
-                start_m0_compression;
-                start_m1_compression;
-                start_m2_compression;
-                start_m3_compression;
-                start_nop;
-                start_finalization_first;
-                start_finalization_else;
-                }
-            default_action = start_nop;
-            const entries = {
-                0: start_m0_compression;
-                1: start_nop();
-                2: start_m1_compression;
-                3: start_nop();
-                4: start_m2_compression;
-                5: start_nop();
-                6: start_m3_compression;
-                7: start_nop();
-                8: start_finalization_first();
-                9: start_finalization_else();
-                10: start_finalization_else();
-                11: start_finalization_else();
-          	}
-        }
-
-        table tb_pre_end{
-        		key = {
-        			hdr.sip_meta.curr_round: exact;
-        		}
-        		actions = {
-        			pre_end_m_0_compression;
-        			pre_end_m_1_compression;
-        			pre_end_m_2_compression;
-        			pre_end_m_3_compression;
-        			pre_end_nop;
-
-        		}
-        		const entries = {
-        			0: pre_end_nop();
-        			1: pre_end_m_0_compression();
-        			2: pre_end_nop();
-        			3: pre_end_m_1_compression();
-        			4: pre_end_nop();
-        			5: pre_end_m_2_compression();
-        			6: pre_end_nop();
-        			7: pre_end_m_3_compression();
-        			8: pre_end_nop();
-        			9: pre_end_nop();
-        			10: pre_end_nop();
-        			11: pre_end_nop();
-        		}
-        	}
 
 				apply {
 
           if (standard_metadata.instance_type != 2){ // no cloned yet
-            if (!hdr.probe.isValid()) {
-              // forward
-            } else {
-              if (hdr.ipv4.ttl < 1) {
+              if (!hdr.probe.isValid() || hdr.ipv4.ttl < 1) {
 
                   drop();
                   exit;
 
-              } else {
-
-                  if (!hdr.sip_meta.isValid()) {
-
-                      hdr.sip_meta.setValid();
-                      hdr.probe.egress_port = (bit<16>) standard_metadata.egress_port;
-                      hdr.sip_meta.m_0 = (bit<64>) (hdr.ipv4.ttl+1 ++ hdr.probe.egress_port ++ hdr.probe.session_id);
-                      hdr.sip_meta.m_1 = hdr.probe.hash;
-                      hdr.sip_meta.m_2 = 0;
-                      hdr.sip_meta.m_3 = 0;
-                      hdr.sip_meta.curr_round = 0;
-                      tb_hashing_init.apply();
-                      start_m0_compression();
-
-                  } else {
-                      hdr.sip_meta.m_2 = 0;
-                      hdr.sip_meta.m_3 = 0;
-                      hdr.sip_meta.m_0 = (bit<64>) (hdr.ipv4.ttl+1 ++ hdr.probe.egress_port ++ hdr.probe.session_id);
-                      hdr.sip_meta.m_1 = hdr.probe.hash;
-                      log_msg("m0 {}",{hdr.sip_meta.m_0});
-                      tb_start_round.apply();
-                  }
-
               }
+
+              hdr.sip_meta.setValid();
+              hdr.probe.egress_port = (bit<16>) standard_metadata.egress_port;
+              hdr.sip_meta.m_0 = (bit<64>) (hdr.ipv4.ttl+1 ++ hdr.probe.egress_port ++ hdr.probe.session_id);
+              hdr.sip_meta.m_1 = hdr.probe.hash;
+              hdr.sip_meta.m_2 = 0;
+              hdr.sip_meta.m_3 = 0;
+              hdr.sip_meta.curr_round = 0;
+              tb_hashing_init.apply();
+              start_m0_compression();
+
               sip_preround_1();
               sip_preround_2();
 
@@ -645,21 +552,418 @@ control MyEgress(
               sip_4_a1();
               sip_4_a2();
 
-              tb_pre_end.apply();
+              pre_end_nop();
 
               sip_postround_1();
               sip_postround_2();
 
               sip_speculate_end_1();
               sip_speculate_end_2();
-              tb_recirc_decision.apply();
+              //tb_recirc_decision.apply();
+              hdr.sip_meta.curr_round = (bit<8> )1;
+
+              // transition
+              hdr.sip_meta.m_2 = 0;
+              hdr.sip_meta.m_3 = 0;
+              hdr.sip_meta.m_0 = (bit<64>) (hdr.ipv4.ttl+1 ++ hdr.probe.egress_port ++ hdr.probe.session_id);
+              hdr.sip_meta.m_1 = hdr.probe.hash;
+              log_msg("m0 {}",{hdr.sip_meta.m_0});
+              start_nop();
+
+              sip_preround_1();
+              sip_preround_2();
+
+              sip_1_a1();
+              sip_1_a2();
+              sip_1_b1();
+              sip_1_b2();
+              sip_2_a1();
+              sip_2_a2();
+
+              sip_3_a1();
+              sip_3_a2();
+              sip_3_b1();
+              sip_3_b2();
+
+              sip_4_a1();
+              sip_4_a2();
+
+              pre_end_m_0_compression();
+
+              sip_postround_1();
+              sip_postround_2();
+
+              sip_speculate_end_1();
+              sip_speculate_end_2();
+              //tb_recirc_decision.apply();
+              hdr.sip_meta.curr_round = (bit<8>) 2;
+
+              // transition
+              hdr.sip_meta.m_2 = 0;
+              hdr.sip_meta.m_3 = 0;
+              hdr.sip_meta.m_0 = (bit<64>) (hdr.ipv4.ttl+1 ++ hdr.probe.egress_port ++ hdr.probe.session_id);
+              hdr.sip_meta.m_1 = hdr.probe.hash;
+              log_msg("m0 {}",{hdr.sip_meta.m_0});
+              start_m1_compression();
+
+              sip_preround_1();
+              sip_preround_2();
+
+              sip_1_a1();
+              sip_1_a2();
+              sip_1_b1();
+              sip_1_b2();
+              sip_2_a1();
+              sip_2_a2();
+
+              sip_3_a1();
+              sip_3_a2();
+              sip_3_b1();
+              sip_3_b2();
+
+              sip_4_a1();
+              sip_4_a2();
+
+              pre_end_nop();
+
+              sip_postround_1();
+              sip_postround_2();
+
+              sip_speculate_end_1();
+              sip_speculate_end_2();
+              //tb_recirc_decision.apply();
+              hdr.sip_meta.curr_round = (bit<8>) 3;
+              // transition
+              hdr.sip_meta.m_2 = 0;
+              hdr.sip_meta.m_3 = 0;
+              hdr.sip_meta.m_0 = (bit<64>) (hdr.ipv4.ttl+1 ++ hdr.probe.egress_port ++ hdr.probe.session_id);
+              hdr.sip_meta.m_1 = hdr.probe.hash;
+              log_msg("m0 {}",{hdr.sip_meta.m_0});
+              start_nop();
+
+              sip_preround_1();
+              sip_preround_2();
+
+              sip_1_a1();
+              sip_1_a2();
+              sip_1_b1();
+              sip_1_b2();
+              sip_2_a1();
+              sip_2_a2();
+
+              sip_3_a1();
+              sip_3_a2();
+              sip_3_b1();
+              sip_3_b2();
+
+              sip_4_a1();
+              sip_4_a2();
 
 
-              if (hdr.udp.dst_port == SIP_PORT + 1){
-                recirculate_preserving_field_list(1);
-                }
-              }
+        		  pre_end_m_1_compression();
 
+              sip_postround_1();
+              sip_postround_2();
+
+              sip_speculate_end_1();
+              sip_speculate_end_2();
+              //tb_recirc_decision.apply();
+              hdr.sip_meta.curr_round = (bit<8> )4;
+              // transition
+              hdr.sip_meta.m_2 = 0;
+              hdr.sip_meta.m_3 = 0;
+              hdr.sip_meta.m_0 = (bit<64>) (hdr.ipv4.ttl+1 ++ hdr.probe.egress_port ++ hdr.probe.session_id);
+              hdr.sip_meta.m_1 = hdr.probe.hash;
+              log_msg("m0 {}",{hdr.sip_meta.m_0});
+              start_m2_compression();
+
+              sip_preround_1();
+              sip_preround_2();
+
+              sip_1_a1();
+              sip_1_a2();
+              sip_1_b1();
+              sip_1_b2();
+              sip_2_a1();
+              sip_2_a2();
+
+              sip_3_a1();
+              sip_3_a2();
+              sip_3_b1();
+              sip_3_b2();
+
+              sip_4_a1();
+              sip_4_a2();
+
+        			pre_end_nop();
+
+              sip_postround_1();
+              sip_postround_2();
+
+              sip_speculate_end_1();
+              sip_speculate_end_2();
+              //tb_recirc_decision.apply();
+              hdr.sip_meta.curr_round = (bit<8>) 5;
+              // transition
+              hdr.sip_meta.m_2 = 0;
+              hdr.sip_meta.m_3 = 0;
+              hdr.sip_meta.m_0 = (bit<64>) (hdr.ipv4.ttl+1 ++ hdr.probe.egress_port ++ hdr.probe.session_id);
+              hdr.sip_meta.m_1 = hdr.probe.hash;
+              log_msg("m0 {}",{hdr.sip_meta.m_0});
+              start_nop();
+
+              sip_preround_1();
+              sip_preround_2();
+
+              sip_1_a1();
+              sip_1_a2();
+              sip_1_b1();
+              sip_1_b2();
+              sip_2_a1();
+              sip_2_a2();
+
+              sip_3_a1();
+              sip_3_a2();
+              sip_3_b1();
+              sip_3_b2();
+
+              sip_4_a1();
+              sip_4_a2();
+
+
+        			pre_end_m_2_compression();
+
+
+              sip_postround_1();
+              sip_postround_2();
+
+              sip_speculate_end_1();
+              sip_speculate_end_2();
+              //tb_recirc_decision.apply();
+              hdr.sip_meta.curr_round = (bit<8>) 6;
+              // transition
+              hdr.sip_meta.m_2 = 0;
+              hdr.sip_meta.m_3 = 0;
+              hdr.sip_meta.m_0 = (bit<64>) (hdr.ipv4.ttl+1 ++ hdr.probe.egress_port ++ hdr.probe.session_id);
+              hdr.sip_meta.m_1 = hdr.probe.hash;
+              log_msg("m0 {}",{hdr.sip_meta.m_0});
+              start_m3_compression();
+
+              sip_preround_1();
+              sip_preround_2();
+
+              sip_1_a1();
+              sip_1_a2();
+              sip_1_b1();
+              sip_1_b2();
+              sip_2_a1();
+              sip_2_a2();
+
+              sip_3_a1();
+              sip_3_a2();
+              sip_3_b1();
+              sip_3_b2();
+
+              sip_4_a1();
+              sip_4_a2();
+
+              pre_end_nop();
+
+              sip_postround_1();
+              sip_postround_2();
+
+              sip_speculate_end_1();
+              sip_speculate_end_2();
+              //tb_recirc_decision.apply();
+              hdr.sip_meta.curr_round = (bit<8>) 7;
+              // transition
+              hdr.sip_meta.m_2 = 0;
+              hdr.sip_meta.m_3 = 0;
+              hdr.sip_meta.m_0 = (bit<64>) (hdr.ipv4.ttl+1 ++ hdr.probe.egress_port ++ hdr.probe.session_id);
+              hdr.sip_meta.m_1 = hdr.probe.hash;
+              log_msg("m0 {}",{hdr.sip_meta.m_0});
+              start_nop();
+
+              sip_preround_1();
+              sip_preround_2();
+
+              sip_1_a1();
+              sip_1_a2();
+              sip_1_b1();
+              sip_1_b2();
+              sip_2_a1();
+              sip_2_a2();
+
+              sip_3_a1();
+              sip_3_a2();
+              sip_3_b1();
+              sip_3_b2();
+
+              sip_4_a1();
+              sip_4_a2();
+
+              pre_end_m_3_compression();
+
+              sip_postround_1();
+              sip_postround_2();
+
+              sip_speculate_end_1();
+              sip_speculate_end_2();
+              //tb_recirc_decision.apply();
+              hdr.sip_meta.curr_round = (bit<8>) 8;
+              // transition
+              hdr.sip_meta.m_2 = 0;
+              hdr.sip_meta.m_3 = 0;
+              hdr.sip_meta.m_0 = (bit<64>) (hdr.ipv4.ttl+1 ++ hdr.probe.egress_port ++ hdr.probe.session_id);
+              hdr.sip_meta.m_1 = hdr.probe.hash;
+              log_msg("m0 {}",{hdr.sip_meta.m_0});
+
+              start_finalization_first();
+
+
+              sip_preround_1();
+              sip_preround_2();
+
+              sip_1_a1();
+              sip_1_a2();
+              sip_1_b1();
+              sip_1_b2();
+              sip_2_a1();
+              sip_2_a2();
+
+              sip_3_a1();
+              sip_3_a2();
+              sip_3_b1();
+              sip_3_b2();
+
+              sip_4_a1();
+              sip_4_a2();
+
+              pre_end_nop();
+
+              sip_postround_1();
+              sip_postround_2();
+
+              sip_speculate_end_1();
+              sip_speculate_end_2();
+              //tb_recirc_decision.apply();
+              hdr.sip_meta.curr_round = (bit<8>) 9;
+              // transition
+              hdr.sip_meta.m_2 = 0;
+              hdr.sip_meta.m_3 = 0;
+              hdr.sip_meta.m_0 = (bit<64>) (hdr.ipv4.ttl+1 ++ hdr.probe.egress_port ++ hdr.probe.session_id);
+              hdr.sip_meta.m_1 = hdr.probe.hash;
+              log_msg("m0 {}",{hdr.sip_meta.m_0});
+              start_finalization_else();
+
+              sip_preround_1();
+              sip_preround_2();
+
+              sip_1_a1();
+              sip_1_a2();
+              sip_1_b1();
+              sip_1_b2();
+              sip_2_a1();
+              sip_2_a2();
+
+              sip_3_a1();
+              sip_3_a2();
+              sip_3_b1();
+              sip_3_b2();
+
+              sip_4_a1();
+              sip_4_a2();
+
+              pre_end_nop();
+
+              sip_postround_1();
+              sip_postround_2();
+
+              sip_speculate_end_1();
+              sip_speculate_end_2();
+              //tb_recirc_decision.apply();
+              hdr.sip_meta.curr_round = (bit<8>) 10;
+              // transition
+              hdr.sip_meta.m_2 = 0;
+              hdr.sip_meta.m_3 = 0;
+              hdr.sip_meta.m_0 = (bit<64>) (hdr.ipv4.ttl+1 ++ hdr.probe.egress_port ++ hdr.probe.session_id);
+              hdr.sip_meta.m_1 = hdr.probe.hash;
+              log_msg("m0 {}",{hdr.sip_meta.m_0});
+              start_finalization_else();
+
+              sip_preround_1();
+              sip_preround_2();
+
+              sip_1_a1();
+              sip_1_a2();
+              sip_1_b1();
+              sip_1_b2();
+              sip_2_a1();
+              sip_2_a2();
+
+              sip_3_a1();
+              sip_3_a2();
+              sip_3_b1();
+              sip_3_b2();
+
+              sip_4_a1();
+              sip_4_a2();
+
+              pre_end_nop();
+              sip_postround_1();
+              sip_postround_2();
+
+              sip_speculate_end_1();
+              sip_speculate_end_2();
+              //tb_recirc_decision.apply();
+              hdr.sip_meta.curr_round = (bit<8>) 11;
+
+              hdr.sip_meta.m_2 = 0;
+              hdr.sip_meta.m_3 = 0;
+              hdr.sip_meta.m_0 = (bit<64>) (hdr.ipv4.ttl+1 ++ hdr.probe.egress_port ++ hdr.probe.session_id);
+              hdr.sip_meta.m_1 = hdr.probe.hash;
+              log_msg("m0 {}",{hdr.sip_meta.m_0});
+              start_finalization_else();
+
+              sip_preround_1();
+              sip_preround_2();
+
+              sip_1_a1();
+              sip_1_a2();
+              sip_1_b1();
+              sip_1_b2();
+              sip_2_a1();
+              sip_2_a2();
+
+              sip_3_a1();
+              sip_3_a2();
+              sip_3_b1();
+              sip_3_b2();
+
+              sip_4_a1();
+              sip_4_a2();
+
+              pre_end_nop();
+              sip_postround_1();
+              sip_postround_2();
+
+              sip_speculate_end_1();
+              sip_speculate_end_2();
+
+              hdr.udp.dst_port = SIP_PORT;
+              hdr.sip_meta.m_0 = 0;
+              hdr.sip_meta.m_1 = 0;
+              hdr.sip_meta.m_2 = 0;
+              hdr.sip_meta.m_3 = 0;
+
+              ig_md.sip_tmp.round_type = ROUND_TYPE_END;
+              hdr.probe.hash = ig_md.sip_tmp.hval;
+              hdr.sip_meta.setInvalid();
+              clone(CloneType.E2E,100);
+
+              //if (hdr.udp.dst_port == SIP_PORT + 1){
+              //  recirculate_preserving_field_list(1);
+              //}
           }
 
 				}
