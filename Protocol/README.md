@@ -1,4 +1,4 @@
-## Running the Protocol
+# Running the Protocol
 
 To run our solution, please proceed with the steps below:
 
@@ -7,17 +7,17 @@ To run our solution, please proceed with the steps below:
 3. Clone this repository under `P4-learning/exercises`.
 4. Execute the following commands inside `Protocol` to start the simulation:
 
-# Run mininet with P4-enabled switches
+### Run mininet with P4-enabled switches
 ```bash
 sudo p4run
 ```
 
-# Start the controller
+### Start the controller
 ```bash
 sudo python3 controller.py
 ```
 
-# Run the traffic inside hosts
+### Run the traffic inside hosts
 ```bash
 xterm h1
 ./h1_script.sh
